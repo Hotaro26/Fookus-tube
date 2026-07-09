@@ -70,12 +70,33 @@ fun PlayerScreen(
     var newPlaylistName by remember { mutableStateOf("") }
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    val mediaSession = remember { androidx.media3.session.MediaSession.Builder(context, exoPlayer).build() }
 
     BackHandler {
         onBack()
     }
 
     LaunchedEffect(url) {
+        val downloadedVideo = viewModel.offline.value.find { it.url == url }
+        if (downloadedVideo != null && downloadedVideo.localUri != null) {
+            streamUrl = downloadedVideo.localUri
+            val mediaItem = androidx.media3.common.MediaItem.Builder()
+                .setUri(Uri.parse(streamUrl))
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(downloadedVideo.title)
+                        .setArtist(downloadedVideo.uploader)
+                        .setArtworkUri(Uri.parse(downloadedVideo.thumbUrl))
+                        .build()
+                )
+                .build()
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+            isLoading = false
+            return@LaunchedEffect
+        }
+
         withContext(Dispatchers.IO) {
             try {
                 val service = NewPipe.getServiceByUrl(url)
@@ -88,7 +109,17 @@ fun PlayerScreen(
                     streamExtractor = extractor
                     streamUrl = bestVideo?.content
                     if (streamUrl != null) {
-                        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(streamUrl)))
+                        val mediaItem = androidx.media3.common.MediaItem.Builder()
+                            .setUri(Uri.parse(streamUrl))
+                            .setMediaMetadata(
+                                androidx.media3.common.MediaMetadata.Builder()
+                                    .setTitle(extractor.name)
+                                    .setArtist(extractor.uploaderName)
+                                    .setArtworkUri(Uri.parse(extractor.thumbnails?.firstOrNull()?.url ?: ""))
+                                    .build()
+                            )
+                            .build()
+                        exoPlayer.setMediaItem(mediaItem)
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = true
                     } else {
@@ -107,6 +138,7 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            mediaSession.release()
             exoPlayer.release()
         }
     }
@@ -125,15 +157,24 @@ fun PlayerScreen(
     }
 
     val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    val hideUi = isInPipMode || isLandscape
+    val isTablet = configuration.screenWidthDp >= 600
+    val isPhysicalLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    var isFullscreen by remember { mutableStateOf(if (!isTablet) isPhysicalLandscape else false) }
+
+    LaunchedEffect(isPhysicalLandscape) {
+        if (!isTablet) {
+            isFullscreen = isPhysicalLandscape
+        }
+    }
+
+    val hideUi = isInPipMode || isFullscreen
 
     val view = LocalView.current
     val window = (context as? Activity)?.window
-    LaunchedEffect(isLandscape) {
+    LaunchedEffect(isFullscreen) {
         if (window != null) {
             val insetsController = WindowCompat.getInsetsController(window, view)
-            if (isLandscape) {
+            if (isFullscreen) {
                 insetsController.hide(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.navigationBars())
                 insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
@@ -206,14 +247,34 @@ fun PlayerScreen(
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Column(modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.widthIn(max = 800.dp).fillMaxSize()) {
             if (isLoading) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else if (errorMessage != null) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("Error: $errorMessage", color = MaterialTheme.colorScheme.error)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Error: $errorMessage", color = MaterialTheme.colorScheme.error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        if (errorMessage?.contains("bot", ignoreCase = true) == true || errorMessage?.contains("captcha", ignoreCase = true) == true || errorMessage?.contains("blocked", ignoreCase = true) == true) {
+                            Text("YouTube is likely blocking your IP. A VPN can help bypass this restriction.", style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Button(onClick = {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                    data = Uri.parse("market://details?id=ch.protonvpn.android")
+                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    intent.data = Uri.parse("https://play.google.com/store/apps/details?id=ch.protonvpn.android")
+                                    context.startActivity(intent)
+                                }
+                            }) {
+                                Text("Get Proton VPN")
+                            }
+                        }
+                    }
                 }
             } else {
                 if (!isMusicMode) {
@@ -227,9 +288,10 @@ fun PlayerScreen(
                                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT
                                 )
-                                setFullscreenButtonClickListener { isFullScreen ->
+                                setFullscreenButtonClickListener { isFullScreenMode ->
+                                    isFullscreen = isFullScreenMode
                                     val activity = context as? Activity
-                                    if (isFullScreen) {
+                                    if (isFullScreenMode) {
                                         activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                                     } else {
                                         activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -240,15 +302,15 @@ fun PlayerScreen(
                         update = { view ->
                             view.useController = !isInPipMode
                         },
-                        modifier = if (isLandscape) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                        modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
                     )
                 } else {
-                    Box(modifier = if (isLandscape) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+                    Box(modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Headset, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 
-                if (isLandscape && !isMusicMode) {
+                if (isFullscreen && !isMusicMode) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         Surface(
                             shape = androidx.compose.foundation.shape.CircleShape,
@@ -271,20 +333,25 @@ fun PlayerScreen(
                 }
                 
                 if (!hideUi) {
-                    streamExtractor?.let { ext ->
+                    val downloadedVideo = viewModel.offline.value.find { it.url == url }
+                    val titleText = streamExtractor?.name ?: downloadedVideo?.title
+                    val uploaderText = streamExtractor?.uploaderName ?: downloadedVideo?.uploader
+                    
+                    if (titleText != null && uploaderText != null) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(ext.name, style = MaterialTheme.typography.titleLarge)
+                            Text(titleText, style = MaterialTheme.typography.titleLarge)
                             Spacer(Modifier.height(16.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth().padding(8.dp)
                                 ) {
+                                    val uploaderUrl = streamExtractor?.uploaderUrl
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.clickable { ext.uploaderUrl?.let { onChannelSelected(it) } }.weight(1f)
+                                        modifier = Modifier.clickable(enabled = uploaderUrl != null) { uploaderUrl?.let { onChannelSelected(it) } }.weight(1f)
                                     ) {
                                         // Channel Info
-                                        val avatarUrl = ext.uploaderAvatars?.firstOrNull()?.url
+                                        val avatarUrl = streamExtractor?.uploaderAvatars?.firstOrNull()?.url
                                         if (avatarUrl != null) {
                                             AsyncImage(
                                                 model = avatarUrl,
@@ -297,11 +364,11 @@ fun PlayerScreen(
                                             )
                                             Spacer(Modifier.width(12.dp))
                                         }
-                                        Text(ext.uploaderName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                        Text(uploaderText, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                                     }
                                     
                                     val isBookmarkedAnywhere = viewModel.bookmarks.value.values.flatten().any { it.url == url }
-                                    val isDownloaded = viewModel.offline.value.any { it.url == url }
+                                    val isDownloaded = downloadedVideo != null
                                     
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         if (isDownloaded) {
@@ -340,14 +407,16 @@ fun PlayerScreen(
                                         }
                                     }
                                 }
-                            }
                         }
                     }
                 }
             }
         }
+    }
+}
 
-    if (showBookmarkDialog) {
+if (showBookmarkDialog) {
+        val downloadedVideo = viewModel.offline.value.find { it.url == url }
         AlertDialog(
             onDismissRequest = { showBookmarkDialog = false },
             title = { Text("Save to playlist") },
@@ -363,9 +432,9 @@ fun PlayerScreen(
                                     } else {
                                         val video = SavedVideo(
                                             url = url,
-                                            title = streamExtractor?.name ?: "",
-                                            uploader = streamExtractor?.uploaderName ?: "",
-                                            thumbUrl = streamExtractor?.thumbnails?.firstOrNull()?.url ?: ""
+                                            title = streamExtractor?.name ?: downloadedVideo?.title ?: "",
+                                            uploader = streamExtractor?.uploaderName ?: downloadedVideo?.uploader ?: "",
+                                            thumbUrl = streamExtractor?.thumbnails?.firstOrNull()?.url ?: downloadedVideo?.thumbUrl ?: ""
                                         )
                                         viewModel.addVideoToBookmark(playlist, video)
                                     }

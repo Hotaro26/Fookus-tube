@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -58,11 +61,42 @@ import android.widget.Toast
 fun NewPipeTab(
     viewModel: DownloaderViewModel,
     contentPadding: PaddingValues,
-    onUrlSelected: (String) -> Unit
+    onUrlSelected: (String) -> Unit,
+    onChannelSelected: (String) -> Unit = {}
 ) {
     var query by viewModel.newPipeQuery
     var results by viewModel.newPipeResults
     var isLoading by remember { mutableStateOf(false) }
+
+    var channelPopupItem by remember { mutableStateOf<StreamInfoItem?>(null) }
+    var currentExtractor by remember { mutableStateOf<org.schabi.newpipe.extractor.search.SearchExtractor?>(null) }
+    var currentPage by remember { mutableStateOf<org.schabi.newpipe.extractor.ListExtractor.InfoItemsPage<org.schabi.newpipe.extractor.InfoItem>?>(null) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+
+    val endOfListReached by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            lastVisibleItem != null && lastVisibleItem.index >= results.size - 2
+        }
+    }
+
+    LaunchedEffect(endOfListReached) {
+        if (endOfListReached && !isLoadingMore && !isLoading && currentPage?.hasNextPage() == true) {
+            isLoadingMore = true
+            withContext(Dispatchers.IO) {
+                try {
+                    val nextPage = currentExtractor!!.getPage(currentPage!!.nextPage)
+                    val items = nextPage.items.filterIsInstance<StreamInfoItem>()
+                    withContext(Dispatchers.Main) {
+                        results = results + items
+                        currentPage = nextPage
+                    }
+                } catch(e: Exception) { e.printStackTrace() }
+                withContext(Dispatchers.Main) { isLoadingMore = false }
+            }
+        }
+    }
     val selectedFilter = viewModel.activeFilter.value
     val setSelectedFilter = { filter: String -> viewModel.activeFilter.value = filter } // "Search", "History", "Offline"
     val coroutineScope = rememberCoroutineScope()
@@ -77,17 +111,29 @@ fun NewPipeTab(
     var isAudioOnly by remember { mutableStateOf(false) }
     val offline by viewModel.offline
 
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+
     val performSearch = {
+        keyboardController?.hide()
+        focusManager.clearFocus()
         if (query.isNotBlank()) {
             setSelectedFilter("Search")
             isLoading = true
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val searchExtractor = ServiceList.YouTube.getSearchExtractor(query)
+                    val service = when (viewModel.searchSource.value) {
+                        "PeerTube" -> ServiceList.PeerTube
+                        "SoundCloud" -> ServiceList.SoundCloud
+                        else -> ServiceList.YouTube
+                    }
+                    val searchExtractor = service.getSearchExtractor(query)
                     searchExtractor.fetchPage()
                     val items = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>()
                     withContext(Dispatchers.Main) {
                         results = items
+                        currentExtractor = searchExtractor
+                        currentPage = searchExtractor.initialPage
                         isLoading = false
                     }
                 } catch (e: Exception) {
@@ -353,34 +399,64 @@ fun NewPipeTab(
                     }
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(listToShow) { item ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth().combinedClickable(
-                                    onClick = { 
-                                        viewModel.addToHistory(item)
-                                        onUrlSelected(item.url) 
-                                    },
-                                    onLongClick = {
-                                        if (currentFilter == "History") viewModel.removeFromHistory(item)
-                                        else videoToDelete = Pair(item, currentFilter)
-                                    }
-                                ),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            ) {
-                                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(modifier = Modifier.size(100.dp, 60.dp)) {
-                                        AsyncImage(
-                                            model = item.thumbUrl,
-                                            contentDescription = null,
-                                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        items(listToShow, key = { it.url + currentFilter }) { item ->
+                            val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                                confirmValueChange = {
+                                    if (it == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart || it == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                                        videoToDelete = Pair(item, currentFilter)
+                                        false
+                                    } else false
+                                }
+                            )
+
+                            androidx.compose.material3.SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    Box(
+                                        Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.errorContainer)
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = MaterialTheme.colorScheme.onErrorContainer
                                         )
                                     }
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(item.uploader, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            ) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                                        onClick = { 
+                                            viewModel.addToHistory(item)
+                                            onUrlSelected(item.url) 
+                                        },
+                                        onLongClick = {
+                                            if (currentFilter == "History") viewModel.removeFromHistory(item)
+                                            else videoToDelete = Pair(item, currentFilter)
+                                        }
+                                    ),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(modifier = Modifier.size(100.dp, 60.dp)) {
+                                            AsyncImage(
+                                                model = item.thumbUrl,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(item.uploader, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
                                     }
                                 }
                             }
@@ -426,7 +502,12 @@ fun NewPipeTab(
                 keyboardActions = KeyboardActions(onSearch = { performSearch() }),
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = ""; results = emptyList() }) {
+                        IconButton(onClick = { 
+                            query = ""
+                            results = emptyList()
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }) {
                             Icon(Icons.Default.Close, contentDescription = "Clear")
                         }
                     } else {
@@ -467,15 +548,19 @@ fun NewPipeTab(
                 if (results.isEmpty()) {
                     // Empty state handled above
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyVerticalGrid(state = listState, columns = GridCells.Adaptive(minSize = 350.dp), modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(results) { item ->
                             val savedItem = SavedVideo(item.url, item.name, item.uploaderName, item.thumbnails?.firstOrNull()?.url ?: "")
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { 
-                                    viewModel.addToHistory(savedItem)
-                                    onUrlSelected(item.url) 
-                                },
+                                modifier = Modifier.fillMaxWidth().combinedClickable(
+                                    onClick = { 
+                                        viewModel.addToHistory(savedItem)
+                                        onUrlSelected(item.url) 
+                                    },
+                                    onLongClick = {
+                                        channelPopupItem = item
+                                    }
+                                ),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             ) {
                                 Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -591,8 +676,13 @@ fun NewPipeTab(
         val (video, filterContext) = videoToDelete!!
         AlertDialog(
             onDismissRequest = { videoToDelete = null },
-            title = { Text("Delete Video") },
-            text = { Text("Are you sure you want to remove '${video.title}'?") },
+            title = { Text(if (filterContext == "History") "Clear History" else "Delete Video") },
+            text = { 
+                Text(
+                    if (filterContext == "History") "Are you sure you want to clear '${video.title}' from your watch history?"
+                    else "Are you sure you want to remove '${video.title}'?"
+                ) 
+            },
             confirmButton = {
                 TextButton(onClick = {
                     if (filterContext == "History") viewModel.removeFromHistory(video)
@@ -603,7 +693,7 @@ fun NewPipeTab(
                     }
                     videoToDelete = null
                 }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(if (filterContext == "History") "Clear" else "Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
