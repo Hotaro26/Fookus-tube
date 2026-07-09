@@ -267,7 +267,7 @@ fun SettingsTab(viewModel: DownloaderViewModel, contentPadding: PaddingValues = 
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
                     IconButton(onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/hotaro344"))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Hotaro26"))
                         context.startActivity(intent)
                     }) {
                         Icon(painterResource(R.drawable.ic_github), contentDescription = "GitHub", tint = MaterialTheme.colorScheme.onSurfaceVariant)
