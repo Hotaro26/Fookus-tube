@@ -15,9 +15,10 @@ Fookus Tube is an open-source, lightweight YouTube client built for Android. It 
 - Dynamic app theming and customizable terminal appearance
 - Minimalist, gesture-friendly UI
 ## Screenshots
+
 | | | |
 |:---:|:---:|:---:|
-| <img width="288" height="656" alt="Screenshot_20260709-123223_FookusTube" src="https://github.com/user-attachments/assets/7d4cc626-9777-4f2e-80bc-d2e05026c19b" /> | <img width="288" height="656" alt="Screenshot_20260709-151618_System UI" src="https://github.com/user-attachments/assets/5e302e5a-4abd-452f-92e5-0e8d9c59a4b8" /> | <img width="288" height="656" alt="Screenshot_20260709-155137_Gabi" src="https://github.com/user-attachments/assets/ae9b978a-b210-43fa-804d-461d9d674730" /> |
+| <img width="288" height="656" alt="Screenshot_20260709-123223_FookusTube" src="https://github.com/user-attachments/assets/7d4cc626-9777-4f2e-80bc-d2e05026c19b" /> | <img width="288" height="656" alt="Screenshot_20260709-151618_System UI" src="https://github.com/user-attachments/assets/5e302e5a-4abd-452f-92e5-0e8d9c59a4b8" /> | <img width="288" height="656" alt="Screenshot_20260709-155137_Gabi" src="https://github.com/user-attachments/assets/6849354b-1777-4d43-acb8-d8de8977b2b2" /> |
 | <img width="288" height="656" alt="Screenshot_20260709-182057_FookusTube" src="https://github.com/user-attachments/assets/98dce7dc-7a57-4298-b7a3-7a6f974f3465" /> | <img width="288" height="656" alt="Screenshot_20260709-182101_FookusTube" src="https://github.com/user-attachments/assets/96e8439b-3dd4-4ab7-9fb3-d1c300dee534" /> | <img width="288" height="656" alt="Screenshot_20260709-182113_FookusTube" src="https://github.com/user-attachments/assets/eece755c-8ac2-4500-9e74-00d1f7bb30c7" /> |
 ## Tablet ui
 
