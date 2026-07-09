@@ -13,6 +13,14 @@ Fookus Tube is an open-source, lightweight YouTube client built for Android. It 
 |:---:|:---:|:---:|
 | <img width="288" height="656" alt="Screenshot_20260709-123223_FookusTube" src="https://github.com/user-attachments/assets/7d4cc626-9777-4f2e-80bc-d2e05026c19b" /> | <img width="288" height="656" alt="Screenshot_20260709-151618_System UI" src="https://github.com/user-attachments/assets/5e302e5a-4abd-452f-92e5-0e8d9c59a4b8" /> | <img width="288" height="656" alt="Screenshot_20260709-155137_Gabi" src="https://github.com/user-attachments/assets/ae9b978a-b210-43fa-804d-461d9d674730" /> |
 | <img width="288" height="656" alt="Screenshot_20260709-182057_FookusTube" src="https://github.com/user-attachments/assets/98dce7dc-7a57-4298-b7a3-7a6f974f3465" /> | <img width="288" height="656" alt="Screenshot_20260709-182101_FookusTube" src="https://github.com/user-attachments/assets/96e8439b-3dd4-4ab7-9fb3-d1c300dee534" /> | <img width="288" height="656" alt="Screenshot_20260709-182113_FookusTube" src="https://github.com/user-attachments/assets/eece755c-8ac2-4500-9e74-00d1f7bb30c7" /> |
+## Tablet ui
+
+| | |
+|:---:|:---:|
+| <img width="512" height="320" alt="Screenshot_20260709-190714_FookusTube" src="https://github.com/user-attachments/assets/bb7b2c38-d1b3-4e85-8238-c294e03bf9a2" /> | <img width="512" height="320" alt="Screenshot_20260709-190733_FookusTube" src="https://github.com/user-attachments/assets/d4f8ff63-964d-4e93-ad58-5cdc138ad595" /> |
+| <img width="512" height="320" alt="Screenshot_20260709-190750_FookusTube" src="https://github.com/user-attachments/assets/96337679-b90c-4718-a113-6b304583e808" /> | <img width="512" height="320" alt="Screenshot_20260709-190827_FookusTube" src="https://github.com/user-attachments/assets/3531c889-2abe-4207-b75e-de3b97ea2459" /> |
+| <img width="512" height="320" alt="Screenshot_20260709-190705_FookusTube" src="https://github.com/user-attachments/assets/b02da4ad-b199-48e8-ac0b-b5769b650a1e" /> | <img width="640" height="400" alt="Screenshot_20260709-144815_System UI" src="https://github.com/user-attachments/assets/b085fe51-5b86-4e24-89c0-928450ee0f61" /> |
+
 
 ## How to Build
 
