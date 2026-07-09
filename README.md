@@ -1,3 +1,9 @@
+<p align="center">
+<img width="300" height="300" alt="fookus_icon-modified" src="https://github.com/user-attachments/assets/31ce97eb-0c7e-4b4f-b6a3-08e60557055f" />
+
+
+</p>
+
 # Fookus Tube
 
 Fookus Tube is an open-source, lightweight YouTube client built for Android. It lets you search, stream, and download videos directly to your device. It focuses on a clean, modern user interface with dynamic theming and seamless local playback.
