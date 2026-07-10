@@ -68,6 +68,10 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
             val offStr = prefs.getString("offline", "[]") ?: "[]"
             offline.value = Json.decodeFromString(offStr)
             lastPlayedUrl.value = prefs.getString("last_played", null)
+            val bmStr = prefs.getString("bookmarks_list", null)
+            if (bmStr != null) {
+                bookmarks.value = Json.decodeFromString(bmStr)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
