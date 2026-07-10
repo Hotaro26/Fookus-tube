@@ -77,7 +77,7 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystoreFile = project.rootProject.file("keys/gabi-release.jks")
+            val keystoreFile = project.rootProject.file("keys/fookus-tube-release.jks")
             if (keystoreFile.exists()) {
                 storeFile = keystoreFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
