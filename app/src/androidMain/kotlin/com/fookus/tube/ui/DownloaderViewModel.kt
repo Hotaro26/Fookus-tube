@@ -16,6 +16,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -39,6 +40,10 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
     
     val terminalTheme = mutableStateOf(TerminalTheme.MONOKAI)
     val consoleLogs = androidx.compose.runtime.mutableStateListOf<String>()
+    val showFullscreenLogs = mutableStateOf(false)
+    
+    val audioSelectionRequired = kotlinx.coroutines.flow.MutableStateFlow<List<org.schabi.newpipe.extractor.stream.AudioStream>?>(null)
+    val selectedAudioStream = kotlinx.coroutines.flow.MutableStateFlow<org.schabi.newpipe.extractor.stream.AudioStream?>(null)
 
     val searchSource = mutableStateOf("YouTube")
     val activeFilter = mutableStateOf("Search")
@@ -59,6 +64,84 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
 
     fun updateTerminalTheme(theme: TerminalTheme) {
         terminalTheme.value = theme
+    }
+
+    val previewMetadata = mutableStateOf<com.fookus.tube.model.OfflinePreview?>(null)
+
+    var previewFetchedUrl: String = ""
+
+    fun fetchPreview(url: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (url.isBlank() || !url.startsWith("http")) {
+                withContext(Dispatchers.Main) {
+                    previewMetadata.value = null
+                    previewFetchedUrl = ""
+                }
+                return@launch
+            }
+            if (url == previewFetchedUrl) {
+                return@launch
+            }
+            previewFetchedUrl = url
+            withContext(Dispatchers.Main) {
+                consoleLogs.clear()
+                consoleLogs.add("----------------------------------------")
+                consoleLogs.add("[SYSTEM] Fetching video metadata...")
+                consoleLogs.add("[INFO] URL: $url")
+                consoleLogs.add("----------------------------------------")
+            }
+            try {
+                org.schabi.newpipe.extractor.NewPipe.init(com.fookus.tube.api.OkHttpDownloader())
+                val extractor = org.schabi.newpipe.extractor.ServiceList.YouTube.getStreamExtractor(url)
+                extractor.fetchPage()
+                
+                val title = extractor.name ?: "Unknown Title"
+                val author = extractor.uploaderName ?: "Unknown Uploader"
+                val thumb = extractor.thumbnails?.firstOrNull()?.url ?: ""
+                
+                val videoOnlyStreams = extractor.videoOnlyStreams
+                val progressiveStreams = extractor.videoStreams
+                
+                val availableQuals = (videoOnlyStreams + progressiveStreams)
+                    .mapNotNull { stream ->
+                        val res = stream.resolution ?: return@mapNotNull null
+                        val heightPart = if (res.contains("x")) res.split("x").lastOrNull() else res.split("p").firstOrNull()
+                        heightPart?.replace(Regex("[^0-9]"), "")?.toIntOrNull()
+                    }
+                    .distinct()
+                    .sortedDescending()
+                    .map { "${it}p" }
+                
+                val maxResInt = (videoOnlyStreams + progressiveStreams)
+                    .mapNotNull { stream ->
+                        val res = stream.resolution ?: return@mapNotNull null
+                        val heightPart = if (res.contains("x")) res.split("x").lastOrNull() else res.split("p").firstOrNull()
+                        heightPart?.replace(Regex("[^0-9]"), "")?.toIntOrNull()
+                    }
+                    .maxOrNull()
+                val maxResStr = if (maxResInt != null) "${maxResInt}p" else "720p"
+                
+                withContext(Dispatchers.Main) {
+                    previewMetadata.value = com.fookus.tube.model.OfflinePreview(
+                        title = title,
+                        author = author,
+                        thumbUrl = thumb,
+                        maxResolution = maxResStr,
+                        availableQualities = availableQuals
+                    )
+                    consoleLogs.add("[SUCCESS] Metadata resolved successfully!")
+                    consoleLogs.add("[INFO] Title: $title")
+                    consoleLogs.add("[INFO] Author: $author")
+                    consoleLogs.add("[INFO] Highest Quality: $maxResStr")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    consoleLogs.add("[error] Extraction failed: ${e.message ?: "Unknown error"}")
+                    previewMetadata.value = null
+                }
+            }
+        }
     }
 
     private fun loadHistoryAndOffline() {
@@ -124,7 +207,7 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
             .apply()
     }
 
-    private fun downloadFile(url: String, outputFile: java.io.File, onProgress: (Int) -> Unit) {
+    private fun downloadFile(url: String, outputFile: java.io.File, cancelPredicate: (() -> Boolean)? = null, onProgress: (Int) -> Unit) {
         val client = okhttp3.OkHttpClient.Builder()
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -141,6 +224,9 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                     var downloadedBytes: Long = 0
                     var lastProgressPercent = -1
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        if (cancelPredicate?.invoke() == true) {
+                            throw java.io.IOException("Download cancelled by user")
+                        }
                         outputStream.write(buffer, 0, bytesRead)
                         downloadedBytes += bytesRead
                         if (totalBytes > 0) {
@@ -265,15 +351,26 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
         
         notificationManager.notify(id, builder.build())
     }
+    
+    val activeDownloads = mutableSetOf<String>()
 
     fun startMockDownload(video: SavedVideo, quality: String, format: String, context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (!activeDownloads.add(video.url)) {
+                consoleLogs.add("[info] Download already in progress for ${video.title}")
+                return@launch
+            }
+            
+            val appContext = getApplication<Application>()
+            val serviceIntent = android.content.Intent(appContext, com.fookus.tube.KeepAliveService::class.java)
+            androidx.core.content.ContextCompat.startForegroundService(appContext, serviceIntent)
+            
             val notificationId = video.url.hashCode()
-            val qualityClean = quality.replace("p", "")
-            consoleLogs.add("fookus@tube: ~$ fookus-dl -f ${qualityClean}p $format ${video.url}")
-            delay(500)
-            consoleLogs.add("[newpipe] Extracting URL: ${video.url}")
             try {
+                val qualityClean = quality.replace("p", "")
+                consoleLogs.add("fookus@tube: ~$ fookus-dl -f ${qualityClean}p $format ${video.url}")
+                delay(500)
+                consoleLogs.add("[newpipe] Extracting URL: ${video.url}")
                 org.schabi.newpipe.extractor.NewPipe.init(com.fookus.tube.api.OkHttpDownloader())
                 val extractor = org.schabi.newpipe.extractor.ServiceList.YouTube.getStreamExtractor(video.url)
                 extractor.fetchPage()
@@ -281,7 +378,24 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                 val actualTitle = extractor.name ?: video.title
                 val actualUploader = extractor.uploaderName ?: video.uploader
                 val actualThumb = extractor.thumbnails?.firstOrNull()?.url ?: video.thumbUrl
+                val actualAvatar = extractor.uploaderAvatars?.firstOrNull()?.url ?: video.uploaderAvatarUrl
                 val safeFileName = actualTitle.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                
+                var localThumbPath: String? = null
+                var localAvatarPath: String? = null
+                try {
+                    val cacheDir = context.cacheDir
+                    if (actualThumb.isNotEmpty()) {
+                        val thumbFile = java.io.File(cacheDir, "thumb_${System.currentTimeMillis()}.jpg")
+                        downloadFile(actualThumb, thumbFile) { }
+                        localThumbPath = "file://${thumbFile.absolutePath}"
+                    }
+                    if (!actualAvatar.isNullOrEmpty()) {
+                        val avatarFile = java.io.File(cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
+                        downloadFile(actualAvatar, avatarFile) { }
+                        localAvatarPath = "file://${avatarFile.absolutePath}"
+                    }
+                } catch(e: Exception) { e.printStackTrace() }
 
                 showDownloadNotification(context, notificationId, "Initializing Download", actualTitle, 0, true)
 
@@ -297,7 +411,7 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                         android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
                         "$safeFileName.m4a"
                     )
-                    downloadFile(audioStream.content, destFile) { progress ->
+                    downloadFile(audioStream.content, destFile, { !activeDownloads.contains(video.url) }) { progress ->
                         if (progress % 10 == 0 || progress == 100) {
                             consoleLogs.add("[download] Audio progress: $progress%")
                             showDownloadNotification(context, notificationId, "Downloading Audio", "$actualTitle - $progress%", progress)
@@ -310,7 +424,10 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                         title = actualTitle,
                         uploader = actualUploader,
                         thumbUrl = actualThumb,
-                        localUri = "file://${destFile.absolutePath}"
+                        localUri = "file://${destFile.absolutePath}",
+                        uploaderAvatarUrl = actualAvatar,
+                        localThumbUri = localThumbPath,
+                        localAvatarUri = localAvatarPath
                     )
                     withContext(Dispatchers.Main) {
                         addToOffline(savedWithUri)
@@ -323,7 +440,7 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                             android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
                             "$safeFileName.mp4"
                         )
-                        downloadFile(progressiveStream.content, destFile) { progress ->
+                        downloadFile(progressiveStream.content, destFile, { !activeDownloads.contains(video.url) }) { progress ->
                             if (progress % 10 == 0 || progress == 100) {
                                 consoleLogs.add("[download] Progress: $progress%")
                                 showDownloadNotification(context, notificationId, "Downloading Video", "$actualTitle - $progress%", progress)
@@ -336,14 +453,23 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                             title = actualTitle,
                             uploader = actualUploader,
                             thumbUrl = actualThumb,
-                            localUri = "file://${destFile.absolutePath}"
+                            localUri = "file://${destFile.absolutePath}",
+                            uploaderAvatarUrl = actualAvatar,
+                            localThumbUri = localThumbPath,
+                            localAvatarUri = localAvatarPath
                         )
                         withContext(Dispatchers.Main) {
                             addToOffline(savedWithUri)
                         }
                     } else {
-                        val videoOnlyStream = extractor.videoOnlyStreams.find { it.resolution.contains(qualityClean) }
-                            ?: extractor.videoOnlyStreams.maxByOrNull { it.resolution.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0 }
+                        val mp4VideoOnlyStreams = extractor.videoOnlyStreams.filter { it.getFormat()?.suffix == "mp4" }
+                        val videoOnlyStream = if (mp4VideoOnlyStreams.isNotEmpty()) {
+                            mp4VideoOnlyStreams.find { it.resolution.contains(qualityClean) }
+                                ?: mp4VideoOnlyStreams.maxByOrNull { it.resolution.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0 }
+                        } else {
+                            extractor.videoOnlyStreams.find { it.resolution.contains(qualityClean) }
+                                ?: extractor.videoOnlyStreams.maxByOrNull { it.resolution.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0 }
+                        }
                         
                         if (videoOnlyStream == null) {
                             consoleLogs.add("[error] No video streams found.")
@@ -351,7 +477,25 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                             return@launch
                         }
                         
-                        val audioStream = extractor.audioStreams.firstOrNull()
+                        val m4aStreams = extractor.audioStreams.filter { it.getFormat()?.suffix == "m4a" }
+                        var audioStream: org.schabi.newpipe.extractor.stream.AudioStream? = null
+                        if (m4aStreams.size > 1) {
+                            consoleLogs.add("[download] Multiple audio tracks found. Waiting for user selection (10s timeout)...")
+                            audioSelectionRequired.value = m4aStreams
+                            val result = kotlinx.coroutines.withTimeoutOrNull(10000L) {
+                                selectedAudioStream.first { it != null }
+                            }
+                            audioStream = result ?: m4aStreams.first()
+                            if (result == null) {
+                                consoleLogs.add("[download] Timeout reached. Selecting default audio track.")
+                            } else {
+                                consoleLogs.add("[download] User selected audio track: ${result.audioLocale?.language ?: "Unknown"}")
+                            }
+                            audioSelectionRequired.value = null
+                            selectedAudioStream.value = null
+                        } else {
+                            audioStream = m4aStreams.firstOrNull() ?: extractor.audioStreams.firstOrNull()
+                        }
                         if (audioStream == null) {
                             consoleLogs.add("[error] No audio streams found.")
                             showDownloadNotification(context, notificationId, "Download Failed", "No audio stream found", 100)
@@ -369,7 +513,7 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                         )
                         
                         consoleLogs.add("[download] Downloading video track...")
-                        downloadFile(videoOnlyStream.content, tempVideoFile) { progress ->
+                        downloadFile(videoOnlyStream.content, tempVideoFile, { !activeDownloads.contains(video.url) }) { progress ->
                             if (progress % 10 == 0 || progress == 100) {
                                 consoleLogs.add("[download] Video track: $progress%")
                                 showDownloadNotification(context, notificationId, "Downloading Video", "$actualTitle - ${progress / 2}%", progress / 2)
@@ -377,7 +521,7 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                         }
                         
                         consoleLogs.add("[download] Downloading audio track...")
-                        downloadFile(audioStream.content, tempAudioFile) { progress ->
+                        downloadFile(audioStream.content, tempAudioFile, { !activeDownloads.contains(video.url) }) { progress ->
                             if (progress % 10 == 0 || progress == 100) {
                                 consoleLogs.add("[download] Audio track: $progress%")
                                 showDownloadNotification(context, notificationId, "Downloading Audio", "$actualTitle - ${50 + (progress / 2)}%", 50 + (progress / 2))
@@ -396,7 +540,10 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                                 title = actualTitle,
                                 uploader = actualUploader,
                                 thumbUrl = actualThumb,
-                                localUri = "file://${destFile.absolutePath}"
+                                localUri = "file://${destFile.absolutePath}",
+                                uploaderAvatarUrl = actualAvatar,
+                                localThumbUri = localThumbPath,
+                                localAvatarUri = localAvatarPath
                             )
                             withContext(Dispatchers.Main) {
                                 addToOffline(savedWithUri)
@@ -411,7 +558,22 @@ class DownloaderViewModel(application: Application) : AndroidViewModel(applicati
                 consoleLogs.add("[error] Failed to download: ${e.message}")
                 showDownloadNotification(context, notificationId, "Download Failed", e.message ?: "Unknown error", 100)
                 e.printStackTrace()
+            } finally {
+                activeDownloads.remove(video.url)
+                if (activeDownloads.isEmpty()) {
+                    val appContext = getApplication<Application>()
+                    val stopIntent = android.content.Intent(appContext, com.fookus.tube.KeepAliveService::class.java).apply {
+                        action = "STOP"
+                    }
+                    appContext.startService(stopIntent)
+                }
             }
+        }
+    }
+
+    fun cancelDownload(url: String) {
+        if (activeDownloads.remove(url)) {
+            consoleLogs.add("[info] Cancelling download for $url...")
         }
     }
 

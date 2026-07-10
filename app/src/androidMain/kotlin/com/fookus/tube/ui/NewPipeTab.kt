@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -36,6 +37,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.combinedClickable
@@ -106,6 +109,7 @@ fun NewPipeTab(
     var showDownloadDialog by remember { mutableStateOf<SavedVideo?>(null) }
     var videoToDelete by remember { mutableStateOf<Pair<SavedVideo, String>?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var showDownloadedScreen by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     var selectedQuality by remember { mutableStateOf("720p") }
     var isAudioOnly by remember { mutableStateOf(false) }
@@ -173,13 +177,17 @@ fun NewPipeTab(
                     FloatingActionButton(onClick = { showCreatePlaylistDialog = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Playlist")
                     }
+                } else if (currentFilter == "Offline") {
+                    FloatingActionButton(onClick = { showDownloadedScreen = true }) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Book, contentDescription = "Downloaded Videos")
+                    }
                 }
             },
             modifier = Modifier.padding(bottom = contentPadding.calculateBottomPadding())
         ) { innerPadding ->
             val listToShow = when {
                     currentFilter == "History" -> history
-                    currentFilter == "Offline" -> offline
+                    currentFilter == "Offline" -> emptyList()
                     currentFilter.startsWith("Bookmark:") -> {
                         val playlistName = currentFilter.removePrefix("Bookmark: ")
                         viewModel.bookmarks.value[playlistName] ?: emptyList()
@@ -213,6 +221,19 @@ fun NewPipeTab(
                     var modeExpanded by remember { mutableStateOf(false) }
                     var currentQuality by remember { mutableStateOf("720p") }
                     var currentFormat by remember { mutableStateOf("video") }
+                    
+                    val preview by remember { viewModel.previewMetadata }
+                    
+                    LaunchedEffect(viewModel.offlineUrl.value) {
+                        if (viewModel.offlineUrl.value.isNotBlank() && viewModel.offlineUrl.value.startsWith("http")) {
+                            kotlinx.coroutines.delay(1000)
+                            viewModel.fetchPreview(viewModel.offlineUrl.value)
+                        } else {
+                            viewModel.previewMetadata.value = null
+                        }
+                    }
+                    
+
                     
                     LaunchedEffect(viewModel.triggerDownloadUrl.value) {
                         if (viewModel.triggerDownloadUrl.value != null) {
@@ -268,7 +289,17 @@ fun NewPipeTab(
                                 expanded = qualityExpanded,
                                 onDismissRequest = { qualityExpanded = false }
                             ) {
-                                listOf("360p", "720p", "1080p").forEach { selectionOption ->
+                                val options = if (currentFormat == "audio") {
+                                    listOf("Medium", "High", "Best")
+                                } else {
+                                    val avQuals = preview?.availableQualities
+                                    if (!avQuals.isNullOrEmpty()) {
+                                        avQuals
+                                    } else {
+                                        listOf("360p", "720p", "1080p")
+                                    }
+                                }
+                                options.forEach { selectionOption ->
                                     DropdownMenuItem(
                                         text = { Text(selectionOption) },
                                         onClick = {
@@ -310,27 +341,91 @@ fun NewPipeTab(
                             }
                         }
                     }
+                    
+                    preview?.let { meta ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (meta.thumbUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = meta.thumbUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(80.dp, 48.dp).clip(RoundedCornerShape(8.dp)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = meta.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = meta.author,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (viewModel.activeDownloads.contains(viewModel.offlineUrl.value)) {
+                                    IconButton(onClick = { viewModel.cancelDownload(viewModel.offlineUrl.value) }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Cancel Download", tint = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
+                    }
 
+                    val isDownloading = viewModel.activeDownloads.contains(viewModel.offlineUrl.value)
                     Button(
                         onClick = {
-                            if (viewModel.offlineUrl.value.isNotBlank()) {
-                                val savedItem = SavedVideo(viewModel.offlineUrl.value, "Manual Download", "Unknown", "")
+                            if (!isDownloading && viewModel.offlineUrl.value.isNotBlank()) {
+                                val title = preview?.title ?: "Manual Download"
+                                val author = preview?.author ?: "Unknown"
+                                val thumb = preview?.thumbUrl ?: ""
+                                val savedItem = SavedVideo(viewModel.offlineUrl.value, title, author, thumb)
                                 viewModel.startMockDownload(savedItem, currentQuality, currentFormat, context)
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp).padding(bottom = 16.dp),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(16.dp),
+                        enabled = !isDownloading
                     ) {
-                        Icon(Icons.Default.Download, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Download")
+                        if (isDownloading) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("Downloading...")
+                        } else {
+                            Icon(Icons.Default.Download, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Download")
+                        }
                     }
                     
                     val currentTerminalTheme = viewModel.terminalTheme.value
-
                     val consoleLogs = viewModel.consoleLogs
+                    var showFullscreenLogs by viewModel.showFullscreenLogs
+
                     Card(
-                        modifier = Modifier.fillMaxWidth().height(180.dp).padding(bottom = 16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .padding(bottom = 16.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { showFullscreenLogs = true }
+                                )
+                            },
                         colors = CardDefaults.cardColors(containerColor = Color(currentTerminalTheme.background)),
                         border = BorderStroke(1.dp, Color(currentTerminalTheme.header)),
                         shape = RoundedCornerShape(16.dp)
@@ -391,13 +486,86 @@ fun NewPipeTab(
                             }
                         }
                     }
+
+                    if (showFullscreenLogs) {
+                        androidx.compose.ui.window.Dialog(
+                            onDismissRequest = { showFullscreenLogs = false },
+                            properties = androidx.compose.ui.window.DialogProperties(
+                                usePlatformDefaultWidth = false
+                            )
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = Color(currentTerminalTheme.background)
+                            ) {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(currentTerminalTheme.header))
+                                            .statusBarsPadding()
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(onClick = { showFullscreenLogs = false }) {
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowBack,
+                                                contentDescription = "Back",
+                                                tint = Color(currentTerminalTheme.text)
+                                            )
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = "Terminal Logs",
+                                            color = Color(currentTerminalTheme.text),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        IconButton(onClick = { viewModel.clearConsole() }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Clear",
+                                                tint = Color(currentTerminalTheme.text).copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider(color = Color(currentTerminalTheme.header), thickness = 1.dp)
+                                    val lazyListState = rememberLazyListState()
+                                    LaunchedEffect(consoleLogs.size) {
+                                        if (consoleLogs.isNotEmpty()) {
+                                            lazyListState.animateScrollToItem(consoleLogs.size - 1)
+                                        }
+                                    }
+                                    LazyColumn(
+                                        state = lazyListState,
+                                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        items(consoleLogs) { log ->
+                                            Text(
+                                                text = log,
+                                                color = Color(currentTerminalTheme.text),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 12.sp,
+                                                lineHeight = 16.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            BackHandler {
+                                showFullscreenLogs = false
+                            }
+                        }
+                    }
                 }
 
-                if (listToShow.isEmpty()) {
+                if (currentFilter != "Offline" && listToShow.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                         Text("No items found.")
                     }
-                } else {
+                } else if (currentFilter != "Offline") {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(listToShow, key = { it.url + currentFilter }) { item ->
                             val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
@@ -445,7 +613,7 @@ fun NewPipeTab(
                                     Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Box(modifier = Modifier.size(100.dp, 60.dp)) {
                                             AsyncImage(
-                                                model = item.thumbUrl,
+                                                model = item.localThumbUri ?: item.thumbUrl,
                                                 contentDescription = null,
                                                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
                                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -479,12 +647,22 @@ fun NewPipeTab(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (isListEmpty) {
-                Icon(
-                    painter = androidx.compose.ui.res.painterResource(android.R.drawable.ic_media_play),
-                    contentDescription = "Fookus Tube",
-                    modifier = Modifier.size(72.dp).padding(bottom = 16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .padding(bottom = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.PlayArrow,
+                        contentDescription = "Fookus Tube",
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Text(
                     "Fookus Tube",
                     style = MaterialTheme.typography.headlineMedium,
@@ -519,25 +697,31 @@ fun NewPipeTab(
                 shape = MaterialTheme.shapes.large
             )
             
-            Row(
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                FilterChip(
-                    selected = false,
-                    onClick = { setSelectedFilter("History") },
-                    label = { Text("History") }
-                )
-                FilterChip(
-                    selected = false,
-                    onClick = { setSelectedFilter("Offline") },
-                    label = { Text("Offline") }
-                )
-                FilterChip(
-                    selected = false,
-                    onClick = { setSelectedFilter("Bookmarks") },
-                    label = { Text("Bookmarks") }
-                )
+                @Composable
+                fun AnimatedFilterChip(label: String, onClick: () -> Unit) {
+                    val interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    val isPressed by interactionSource.collectIsPressedAsState()
+                    val cornerRadius by androidx.compose.animation.core.animateDpAsState(targetValue = if (isPressed) 50.dp else 8.dp)
+                    
+                    FilterChip(
+                        selected = false,
+                        onClick = onClick,
+                        label = { Text(label) },
+                        shape = RoundedCornerShape(cornerRadius),
+                        interactionSource = interactionSource
+                    )
+                }
+
+                AnimatedFilterChip("History") { setSelectedFilter("History") }
+                AnimatedFilterChip("Offline") { setSelectedFilter("Offline") }
+                AnimatedFilterChip("Bookmarks") { setSelectedFilter("Bookmarks") }
+                AnimatedFilterChip("Downloads") { showDownloadedScreen = true }
             }
             
             if (isLoading) {
@@ -704,6 +888,141 @@ fun NewPipeTab(
         )
     }
 
+    if (showDownloadedScreen) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showDownloadedScreen = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { showDownloadedScreen = false }) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Downloaded Videos",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    HorizontalDivider()
+                    
+                    val downloadedList = offline
+                    if (downloadedList.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "No downloaded videos found.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(downloadedList, key = { it.url }) { item ->
+                                val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                                    confirmValueChange = {
+                                        if (it == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart || it == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                                            videoToDelete = Pair(item, "Offline")
+                                            false
+                                        } else false
+                                    }
+                                )
+
+                                androidx.compose.material3.SwipeToDismissBox(
+                                    state = dismissState,
+                                    backgroundContent = {
+                                        Box(
+                                            Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.errorContainer)
+                                                .padding(horizontal = 20.dp),
+                                            contentAlignment = Alignment.CenterEnd
+                                        ) {
+                                            Icon(
+                                                androidx.compose.material.icons.Icons.Default.Delete,
+                                                contentDescription = "Delete",
+                                                tint = MaterialTheme.colorScheme.onErrorContainer
+                                            )
+                                        }
+                                    }
+                                ) {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().combinedClickable(
+                                            onClick = { 
+                                                viewModel.addToHistory(item)
+                                                onUrlSelected(item.url)
+                                                showDownloadedScreen = false
+                                            },
+                                            onLongClick = {
+                                                videoToDelete = Pair(item, "Offline")
+                                            }
+                                        ),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Box(modifier = Modifier.size(100.dp, 60.dp)) {
+                                                AsyncImage(
+                                                    model = item.localThumbUri ?: item.thumbUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                            }
+                                            Spacer(Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    maxLines = 2,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = item.uploader,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            BackHandler {
+                showDownloadedScreen = false
+            }
+        }
+    }
+
     if (showCreatePlaylistDialog) {
         AlertDialog(
             onDismissRequest = { 
@@ -736,6 +1055,40 @@ fun NewPipeTab(
                     newPlaylistName = ""
                 }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    val audioSelectionRequired by viewModel.audioSelectionRequired.collectAsState()
+    
+    val currentAudioSelection = audioSelectionRequired
+    if (currentAudioSelection != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.selectedAudioStream.value = currentAudioSelection.first() },
+            title = { Text("Select Audio Track") },
+            text = {
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                    items(currentAudioSelection) { stream ->
+                        val lang = stream.audioLocale?.displayName ?: "Original"
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                viewModel.selectedAudioStream.value = stream
+                            },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Text(
+                                text = lang,
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.selectedAudioStream.value = currentAudioSelection.first() }) {
+                    Text("Skip (Original)")
                 }
             }
         )

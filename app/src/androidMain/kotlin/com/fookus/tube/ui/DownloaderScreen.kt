@@ -263,6 +263,7 @@ fun SettingsListItem(
 
 @Composable
 fun SettingsMainList(onNavigate: (String) -> Unit, contentPadding: PaddingValues) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -314,6 +315,17 @@ fun SettingsMainList(onNavigate: (String) -> Unit, contentPadding: PaddingValues
                     title = "Story",
                     subtitle = "The journey of this app",
                     onClick = { onNavigate("Story") }
+                )
+                HorizontalDivider(modifier = Modifier.alpha(0.1f))
+                SettingsListItem(
+                    icon = Icons.Default.Info,
+                    iconColor = androidx.compose.ui.graphics.Color(0xFF6B8B4C),
+                    title = "App Info",
+                    subtitle = "Version 1.2",
+                    onClick = {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Hotaro26/fookus-tube"))
+                        context.startActivity(intent)
+                    }
                 )
             }
         }

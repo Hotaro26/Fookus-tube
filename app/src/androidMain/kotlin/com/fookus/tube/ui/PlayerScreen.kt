@@ -351,7 +351,9 @@ fun PlayerScreen(
                                         modifier = Modifier.clickable(enabled = uploaderUrl != null) { uploaderUrl?.let { onChannelSelected(it) } }.weight(1f)
                                     ) {
                                         // Channel Info
-                                        val avatarUrl = streamExtractor?.uploaderAvatars?.firstOrNull()?.url
+                                        val avatarUrl = streamExtractor?.uploaderAvatars?.firstOrNull()?.url 
+                                            ?: downloadedVideo?.localAvatarUri 
+                                            ?: downloadedVideo?.uploaderAvatarUrl
                                         if (avatarUrl != null) {
                                             AsyncImage(
                                                 model = avatarUrl,
