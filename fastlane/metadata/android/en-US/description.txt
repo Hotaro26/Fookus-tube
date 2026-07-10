@@ -1,1 +1,1 @@
-Fookus Tube is an open-source multimedia player for Android.
+Fookus Tube is a distraction free YouTube client with downloading capabilities.
