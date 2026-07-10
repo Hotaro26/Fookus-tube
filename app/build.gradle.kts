@@ -77,10 +77,13 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("gabi-release.jks")
-            storePassword = "gabi123"
-            keyAlias = "gabi"
-            keyPassword = "gabi123"
+            val keystoreFile = project.rootProject.file("keys/gabi-release.jks")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            }
         }
     }
 
