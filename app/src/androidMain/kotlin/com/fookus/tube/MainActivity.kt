@@ -64,8 +64,18 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(intent) {
                 handleIntent(intent, viewModel)
             }
-
-
+            
+            LaunchedEffect(Unit) {
+                try {
+                    val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                    val versionName = packageInfo.versionName
+                    if (versionName != null) {
+                        UpdateChecker.check(this@MainActivity, versionName)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
             val darkTheme = when (viewModel.themeMode.intValue) {
                 1 -> false
                 2 -> true

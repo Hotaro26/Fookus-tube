@@ -278,35 +278,77 @@ fun PlayerScreen(
                 }
             } else {
                 if (!isMusicMode) {
-                    AndroidView(
-                        factory = { ctx ->
-                            val view = android.view.LayoutInflater.from(ctx).inflate(com.fookus.tube.R.layout.player_view_layout, null) as PlayerView
-                            view.apply {
-                                player = exoPlayer
-                                useController = !isInPipMode
-                                layoutParams = android.widget.FrameLayout.LayoutParams(
-                                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-                                )
-                                setFullscreenButtonClickListener { isFullScreenMode ->
-                                    isFullscreen = isFullScreenMode
-                                    val activity = context as? Activity
-                                    if (isFullScreenMode) {
-                                        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                                    } else {
-                                        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    val playerModifier = if (isFullscreen || isInPipMode) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .aspectRatio(16f / 9f)
+                    }
+                    val playerShape = if (isFullscreen || isInPipMode) {
+                        androidx.compose.ui.graphics.RectangleShape
+                    } else {
+                        androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                    }
+
+                    Surface(
+                        modifier = playerModifier,
+                        shape = playerShape,
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        shadowElevation = if (isFullscreen || isInPipMode) 0.dp else 12.dp
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                val view = android.view.LayoutInflater.from(ctx).inflate(com.fookus.tube.R.layout.player_view_layout, null) as PlayerView
+                                view.apply {
+                                    player = exoPlayer
+                                    useController = !isInPipMode
+                                    layoutParams = android.widget.FrameLayout.LayoutParams(
+                                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                                    )
+                                    setFullscreenButtonClickListener { isFullScreenMode ->
+                                        isFullscreen = isFullScreenMode
+                                        val activity = context as? Activity
+                                        if (isFullScreenMode) {
+                                            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                        } else {
+                                            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        update = { view ->
-                            view.useController = !isInPipMode
-                        },
-                        modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                    )
+                            },
+                            update = { view ->
+                                view.useController = !isInPipMode
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 } else {
-                    Box(modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Headset, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+                    val musicModifier = if (isFullscreen || isInPipMode) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .aspectRatio(16f / 9f)
+                    }
+                    val musicShape = if (isFullscreen || isInPipMode) {
+                        androidx.compose.ui.graphics.RectangleShape
+                    } else {
+                        androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                    }
+
+                    Surface(
+                        modifier = musicModifier,
+                        shape = musicShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shadowElevation = if (isFullscreen || isInPipMode) 0.dp else 12.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(Icons.Default.Headset, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
                 

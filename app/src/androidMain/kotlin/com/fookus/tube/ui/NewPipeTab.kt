@@ -1,5 +1,6 @@
 package com.fookus.tube.ui
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -761,11 +762,6 @@ fun NewPipeTab(
                                         Text(savedItem.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                         Spacer(Modifier.height(4.dp))
                                         Text(savedItem.uploader, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    IconButton(onClick = { 
-                                        showDownloadDialog = savedItem
-                                    }) {
-                                        Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.primary)
                                     }
                                 }
                             }

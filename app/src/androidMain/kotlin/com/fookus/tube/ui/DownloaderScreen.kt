@@ -317,11 +317,21 @@ fun SettingsMainList(onNavigate: (String) -> Unit, contentPadding: PaddingValues
                     onClick = { onNavigate("Story") }
                 )
                 HorizontalDivider(modifier = Modifier.alpha(0.1f))
+                val context = LocalContext.current
+                val packageInfo = remember {
+                    try {
+                        context.packageManager.getPackageInfo(context.packageName, 0)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                val versionName = packageInfo?.versionName ?: "Unknown"
+
                 SettingsListItem(
                     icon = Icons.Default.Info,
                     iconColor = androidx.compose.ui.graphics.Color(0xFF6B8B4C),
                     title = "App Info",
-                    subtitle = "Version 1.2",
+                    subtitle = "Version $versionName",
                     onClick = {
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Hotaro26/fookus-tube"))
                         context.startActivity(intent)
