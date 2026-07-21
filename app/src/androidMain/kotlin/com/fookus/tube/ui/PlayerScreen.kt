@@ -248,7 +248,7 @@ fun PlayerScreen(
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            Column(modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.widthIn(max = 800.dp).fillMaxSize()) {
+            Column(modifier = if (isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize()) {
             if (isLoading) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -283,14 +283,9 @@ fun PlayerScreen(
                     } else {
                         Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
                             .aspectRatio(16f / 9f)
                     }
-                    val playerShape = if (isFullscreen || isInPipMode) {
-                        androidx.compose.ui.graphics.RectangleShape
-                    } else {
-                        androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                    }
+                    val playerShape = androidx.compose.ui.graphics.RectangleShape
 
                     Surface(
                         modifier = playerModifier,
@@ -349,14 +344,9 @@ fun PlayerScreen(
                     } else {
                         Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
                             .aspectRatio(16f / 9f)
                     }
-                    val musicShape = if (isFullscreen || isInPipMode) {
-                        androidx.compose.ui.graphics.RectangleShape
-                    } else {
-                        androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                    }
+                    val musicShape = androidx.compose.ui.graphics.RectangleShape
 
                     Surface(
                         modifier = musicModifier,

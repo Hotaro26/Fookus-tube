@@ -8,6 +8,12 @@
         android:id="@id/exo_controls_background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="#00000000" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:layout_gravity="bottom"
         android:background="@drawable/player_gradient_bg" />
 
     <LinearLayout
@@ -23,15 +29,15 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:padding="16dp"
+            android:padding="12dp"
             android:scaleType="centerInside" />
 
         <ImageButton
             android:id="@id/exo_play_pause"
             style="@style/ExoMediaButton.Play"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:layout_marginHorizontal="32dp"
+            android:layout_width="88dp"
+            android:layout_height="88dp"
+            android:layout_marginHorizontal="24dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:padding="20dp"
             android:scaleType="centerInside" />
@@ -42,7 +48,7 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:padding="16dp"
+            android:padding="12dp"
             android:scaleType="centerInside" />
     </LinearLayout>
 
@@ -52,19 +58,14 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:background="@android:color/transparent"
-        android:layout_marginHorizontal="16dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="24dp"
-        android:paddingHorizontal="8dp"
-        android:elevation="8dp">
+        android:background="@android:color/transparent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="16dp"
             android:layout_marginBottom="4dp">
 
             <TextView
@@ -72,7 +73,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="#FFFFFF"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif-medium" />
 
             <TextView
@@ -80,7 +81,7 @@
                 android:layout_height="wrap_content"
                 android:text=" / "
                 android:textColor="#B3FFFFFF"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif-medium" />
 
             <TextView
@@ -88,7 +89,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="#B3FFFFFF"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif-medium" />
 
             <Space
@@ -100,28 +101,31 @@
                 android:id="@id/exo_settings"
                 style="@style/ExoMediaButton"
                 android:src="@drawable/exo_styled_controls_settings"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:padding="8dp"
+                android:padding="12dp"
                 android:scaleType="centerInside" />
 
             <ImageButton
                 android:id="@id/exo_fullscreen"
                 style="@style/ExoMediaButton"
                 android:src="@drawable/exo_styled_controls_fullscreen_enter"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:padding="8dp"
+                android:padding="12dp"
                 android:scaleType="centerInside" />
         </LinearLayout>
         
         <androidx.media3.ui.DefaultTimeBar
             android:id="@id/exo_progress"
             android:layout_width="match_parent"
-            android:layout_height="24dp"
-            app:bar_height="6dp"
+            android:layout_height="wrap_content"
+            android:minHeight="24dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginHorizontal="8dp"
+            app:bar_height="4dp"
             app:scrubber_color="?attr/colorPrimary"
             app:played_color="?attr/colorPrimary"
             app:buffered_color="#66FFFFFF"
