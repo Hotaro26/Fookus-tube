@@ -317,6 +317,24 @@ fun PlayerScreen(
                                             activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                                         }
                                     }
+                                    
+                                    val gestureDetector = android.view.GestureDetector(ctx, object : android.view.GestureDetector.SimpleOnGestureListener() {
+                                        override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                                            val newFullscreen = !isFullscreen
+                                            isFullscreen = newFullscreen
+                                            val activity = context as? Activity
+                                            if (newFullscreen) {
+                                                activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                            } else {
+                                                activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                            }
+                                            return true
+                                        }
+                                    })
+                                    setOnTouchListener { _, event ->
+                                        gestureDetector.onTouchEvent(event)
+                                        false // Allow single taps to pass through to PlayerView
+                                    }
                                 }
                             },
                             update = { view ->

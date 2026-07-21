@@ -37,6 +37,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material.icons.filled.Check
@@ -230,12 +233,30 @@ fun SettingsListItem(
     iconColor: androidx.compose.ui.graphics.Color,
     title: String,
     subtitle: String,
+    topRadius: androidx.compose.ui.unit.Dp = 0.dp,
+    bottomRadius: androidx.compose.ui.unit.Dp = 0.dp,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (isPressed) 0.95f else 1f)
+    val currentTop by androidx.compose.animation.core.animateDpAsState(if (isPressed) 24.dp else topRadius)
+    val currentBottom by androidx.compose.animation.core.animateDpAsState(if (isPressed) 24.dp else bottomRadius)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .scale(scale)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(
+                topStart = currentTop, topEnd = currentTop,
+                bottomStart = currentBottom, bottomEnd = currentBottom
+            ))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clickable(
+                interactionSource = interactionSource, 
+                indication = null,
+                onClick = onClick
+            )
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -279,65 +300,61 @@ fun SettingsMainList(onNavigate: (String) -> Unit, contentPadding: PaddingValues
             modifier = Modifier.padding(vertical = 16.dp)
         )
         
-        Card(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Column {
-                SettingsListItem(
-                    icon = Icons.Default.Palette,
-                    iconColor = androidx.compose.ui.graphics.Color(0xFF88637B),
-                    title = "Customisation",
-                    subtitle = "Themes, App Appearance, Terminal",
-                    onClick = { onNavigate("Customisation") }
-                )
-                HorizontalDivider(modifier = Modifier.alpha(0.1f))
-                SettingsListItem(
-                    icon = Icons.Default.Search,
-                    iconColor = androidx.compose.ui.graphics.Color(0xFF00758F),
-                    title = "Sources",
-                    subtitle = "Search engines like YouTube, PeerTube",
-                    onClick = { onNavigate("Sources") }
-                )
-                HorizontalDivider(modifier = Modifier.alpha(0.1f))
-                SettingsListItem(
-                    icon = Icons.Default.Info,
-                    iconColor = androidx.compose.ui.graphics.Color(0xFF4C6B8B),
-                    title = "About",
-                    subtitle = "Developer info, GitHub, Support",
-                    onClick = { onNavigate("About") }
-                )
-                HorizontalDivider(modifier = Modifier.alpha(0.1f))
-                SettingsListItem(
-                    icon = Icons.Default.Book,
-                    iconColor = androidx.compose.ui.graphics.Color(0xFF7A4F5C),
-                    title = "Story",
-                    subtitle = "The journey of this app",
-                    onClick = { onNavigate("Story") }
-                )
-                HorizontalDivider(modifier = Modifier.alpha(0.1f))
-                val context = LocalContext.current
-                val packageInfo = remember {
-                    try {
-                        context.packageManager.getPackageInfo(context.packageName, 0)
-                    } catch (e: Exception) {
-                        null
-                    }
+            SettingsListItem(
+                icon = Icons.Default.Palette,
+                iconColor = androidx.compose.ui.graphics.Color(0xFF88637B),
+                title = "Customisation",
+                subtitle = "Themes, App Appearance, Terminal",
+                topRadius = 24.dp,
+                onClick = { onNavigate("Customisation") }
+            )
+            SettingsListItem(
+                icon = Icons.Default.Search,
+                iconColor = androidx.compose.ui.graphics.Color(0xFF00758F),
+                title = "Sources",
+                subtitle = "Search engines like YouTube, PeerTube",
+                onClick = { onNavigate("Sources") }
+            )
+            SettingsListItem(
+                icon = Icons.Default.Info,
+                iconColor = androidx.compose.ui.graphics.Color(0xFF4C6B8B),
+                title = "About",
+                subtitle = "Developer info, GitHub, Support",
+                onClick = { onNavigate("About") }
+            )
+            SettingsListItem(
+                icon = Icons.Default.Book,
+                iconColor = androidx.compose.ui.graphics.Color(0xFF7A4F5C),
+                title = "Story",
+                subtitle = "The journey of this app",
+                onClick = { onNavigate("Story") }
+            )
+            
+            val context = LocalContext.current
+            val packageInfo = remember {
+                try {
+                    context.packageManager.getPackageInfo(context.packageName, 0)
+                } catch (e: Exception) {
+                    null
                 }
-                val versionName = packageInfo?.versionName ?: "Unknown"
-
-                SettingsListItem(
-                    icon = Icons.Default.Info,
-                    iconColor = androidx.compose.ui.graphics.Color(0xFF6B8B4C),
-                    title = "App Info",
-                    subtitle = "Version $versionName",
-                    onClick = {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Hotaro26/fookus-tube"))
-                        context.startActivity(intent)
-                    }
-                )
             }
+            val versionName = packageInfo?.versionName ?: "Unknown"
+
+            SettingsListItem(
+                icon = Icons.Default.Info,
+                iconColor = androidx.compose.ui.graphics.Color(0xFF6B8B4C),
+                title = "App Info",
+                subtitle = "Version $versionName",
+                bottomRadius = 24.dp,
+                onClick = {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Hotaro26/fookus-tube"))
+                    context.startActivity(intent)
+                }
+            )
         }
     }
 }

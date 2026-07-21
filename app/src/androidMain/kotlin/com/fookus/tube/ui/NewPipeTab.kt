@@ -71,6 +71,7 @@ fun NewPipeTab(
     var query by viewModel.newPipeQuery
     var results by viewModel.newPipeResults
     var isLoading by remember { mutableStateOf(false) }
+    var searchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     var channelPopupItem by remember { mutableStateOf<StreamInfoItem?>(null) }
     var currentExtractor by remember { mutableStateOf<org.schabi.newpipe.extractor.search.SearchExtractor?>(null) }
@@ -125,7 +126,8 @@ fun NewPipeTab(
         if (query.isNotBlank()) {
             setSelectedFilter("Search")
             isLoading = true
-            coroutineScope.launch(Dispatchers.IO) {
+            searchJob?.cancel()
+            searchJob = coroutineScope.launch(Dispatchers.IO) {
                 try {
                     val service = when (viewModel.searchSource.value) {
                         "PeerTube" -> ServiceList.PeerTube
@@ -636,93 +638,132 @@ fun NewPipeTab(
         }
         } else {
             BackHandler(enabled = query.isNotEmpty() || results.isNotEmpty()) {
+                searchJob?.cancel()
+                isLoading = false
                 query = ""
                 results = emptyList()
+                currentExtractor = null
+                currentPage = null
             }
             Box(modifier = Modifier.fillMaxSize()) {
 
         val isListEmpty = results.isEmpty() && !isLoading
         Column(
             modifier = Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 16.dp),
-            verticalArrangement = if (isListEmpty) Arrangement.Center else Arrangement.Top,
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (isListEmpty) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .padding(bottom = 16.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                        .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.PlayArrow,
-                        contentDescription = "Fookus Tube",
-                        modifier = Modifier.size(36.dp),
-                        tint = MaterialTheme.colorScheme.primary
+            AnimatedVisibility(
+                visible = isListEmpty,
+                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(modifier = Modifier.height(100.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .padding(bottom = 16.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.PlayArrow,
+                            contentDescription = "Fookus Tube",
+                            modifier = Modifier.size(36.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        "Fookus Tube",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
-                Text(
-                    "Fookus Tube",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(24.dp))
             }
 
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
+            Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-                placeholder = { Text("Search YouTube...") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { performSearch() }),
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AnimatedVisibility(visible = results.isNotEmpty() || isLoading) {
+                    IconButton(
+                        onClick = { 
+                            searchJob?.cancel()
+                            isLoading = false
                             query = ""
                             results = emptyList()
-                            focusManager.clearFocus()
-                            keyboardController?.hide()
-                        }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear")
-                        }
-                    } else {
-                        IconButton(onClick = { performSearch() }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
-                        }
+                            currentExtractor = null
+                            currentPage = null
+                            focusManager.clearFocus() 
+                        },
+                        modifier = Modifier.padding(end = 8.dp).background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.CircleShape)
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
-                },
-                shape = MaterialTheme.shapes.large
-            )
-            
-            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-            androidx.compose.foundation.layout.FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                @Composable
-                fun AnimatedFilterChip(label: String, onClick: () -> Unit) {
-                    val interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    val isPressed by interactionSource.collectIsPressedAsState()
-                    val cornerRadius by androidx.compose.animation.core.animateDpAsState(targetValue = if (isPressed) 50.dp else 8.dp)
-                    
-                    FilterChip(
-                        selected = false,
-                        onClick = onClick,
-                        label = { Text(label) },
-                        shape = RoundedCornerShape(cornerRadius),
-                        interactionSource = interactionSource
-                    )
                 }
 
-                AnimatedFilterChip("History") { setSelectedFilter("History") }
-                AnimatedFilterChip("Offline") { setSelectedFilter("Offline") }
-                AnimatedFilterChip("Bookmarks") { setSelectedFilter("Bookmarks") }
-                AnimatedFilterChip("Downloads") { showDownloadedScreen = true }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Search YouTube...") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { performSearch() }),
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { 
+                                searchJob?.cancel()
+                                isLoading = false
+                                query = ""
+                                results = emptyList()
+                                currentExtractor = null
+                                currentPage = null
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                            }
+                        } else {
+                            IconButton(onClick = { performSearch() }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                        }
+                    },
+                    shape = MaterialTheme.shapes.large
+                )
+            }
+            
+            AnimatedVisibility(visible = isListEmpty) {
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    @Composable
+                    fun AnimatedFilterChip(label: String, onClick: () -> Unit) {
+                        val interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        val isPressed by interactionSource.collectIsPressedAsState()
+                        val cornerRadius by androidx.compose.animation.core.animateDpAsState(targetValue = if (isPressed) 50.dp else 8.dp)
+                        
+                        FilterChip(
+                            selected = false,
+                            onClick = onClick,
+                            label = { Text(label) },
+                            shape = RoundedCornerShape(cornerRadius),
+                            interactionSource = interactionSource
+                        )
+                    }
+    
+                    AnimatedFilterChip("History") { setSelectedFilter("History") }
+                    AnimatedFilterChip("Offline") { setSelectedFilter("Offline") }
+                    AnimatedFilterChip("Bookmarks") { setSelectedFilter("Bookmarks") }
+                    AnimatedFilterChip("Downloads") { showDownloadedScreen = true }
+                }
             }
             
             if (isLoading) {
